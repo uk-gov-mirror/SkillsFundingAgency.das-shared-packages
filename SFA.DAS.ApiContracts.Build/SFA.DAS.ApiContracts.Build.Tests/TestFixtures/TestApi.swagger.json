@@ -356,6 +356,80 @@
         }
       }
     },
+    "/api/das-items/{itemId}": {
+      "get": {
+        "operationId": "GetDasItemById",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DasRequestResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "PatchDasItem",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatchDasItemResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/das-requests/{dasRequestId}/archive": {
       "post": {
         "operationId": "ArchiveDasRequest",
@@ -490,6 +564,23 @@
             "type": "string",
             "nullable": true
           }
+        }
+      },
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "nullable": true },
+          "op": { "type": "string", "nullable": true },
+          "from": { "type": "string", "nullable": true },
+          "value": { "nullable": true }
+        },
+        "additionalProperties": false
+      },
+      "PatchDasItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "updated": { "type": "boolean" }
         }
       },
       "PutDasRequest": {

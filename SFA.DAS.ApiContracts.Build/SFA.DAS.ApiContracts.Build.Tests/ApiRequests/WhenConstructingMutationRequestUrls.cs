@@ -131,6 +131,17 @@ public class WhenConstructingMutationRequestUrls
     }
 
     [Test]
+    public void PatchDasItemsByItemId_UsesGetResponseTypeNotPatchResponseType()
+    {
+        // When the PATCH body is a JSON Patch Operation array and a GET exists on the same path,
+        // the generated Data property should use the GET response type (DasRequestResponse),
+        // not the PATCH 200 response type (PatchDasItemResponse).
+        typeof(PatchDasItemsByItemIdApiRequest)
+            .GetProperty("Data")!.PropertyType
+            .Should().Be(typeof(Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<DasRequestResponse>));
+    }
+
+    [Test]
     public void PutDasRequestsByDasRequestId_IsClassNotRecord()
     {
         typeof(PutDasRequestsByDasRequestIdApiRequest).IsClass.Should().BeTrue();
