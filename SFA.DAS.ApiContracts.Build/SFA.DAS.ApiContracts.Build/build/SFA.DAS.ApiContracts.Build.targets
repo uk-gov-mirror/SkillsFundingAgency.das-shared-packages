@@ -188,19 +188,29 @@
                 }
 
                 // For PATCH operations: wrap the inferred type in JsonPatchDocument<T>.
-                // If the request body is a named $ref, use that type directly.
-                // If the body is a generic Operation array (how ASP.NET Core represents JsonPatchDocument<T>
-                // in swagger), prefer the GET response type on the same path — the GET response describes
-                // the resource being patched, which is the correct T. Falls back to the PATCH 200 response
-                // type, then "object".
+                // Priority order for resolving T:
+                //   1. x-patch-document-type extension — set by an OperationFilter in the API that reads
+                //      the actual JsonPatchDocument<T> parameter type (most accurate).
+                //   2. Named $ref in the request body — use that type directly.
+                //   3. GET response type on the same path — the resource you GET is the one you patch.
+                //   4. PATCH 200 response type — last resort fallback.
+                //   5. "object" — unable to determine type.
                 string GetPatchDataType(Dictionary<string,object> op, Dictionary<string,object> pathItem)
                 {
+                    // Priority 1: explicit x-patch-document-type extension
+                    if (op != null && op.ContainsKey("x-patch-document-type"))
+                    {
+                        string extType = AsStr(op["x-patch-document-type"]);
+                        if (!string.IsNullOrEmpty(extType))
+                            return "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<" + extType + ">";
+                    }
+
+                    // Priority 2: named $ref in the request body
                     string bodyType = GetDataType(op);
                     if (bodyType != "object" && !bodyType.StartsWith("System.Collections.Generic.List<"))
                         return "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<" + bodyType + ">";
 
-                    // Body is a generic list/object — check whether items are JSON Patch Operations.
-                    // If so, prefer the GET response type on the same path as the document's type parameter.
+                    // Body is a generic list/object — detect whether it is a JSON Patch Operation array.
                     bool isJsonPatchBody = false;
                     if (op != null && op.ContainsKey("requestBody"))
                     {
@@ -222,6 +232,7 @@
                         }
                     }
 
+                    // Priority 3: GET response type on the same path
                     if (isJsonPatchBody && pathItem != null && pathItem.ContainsKey("get"))
                     {
                         var getOp = AsObj(pathItem["get"]);
@@ -248,6 +259,7 @@
                         }
                     }
 
+                    // Priority 4: PATCH 200 response type
                     if (op == null || !op.ContainsKey("responses")) return "object";
                     var responses = AsObj(op["responses"]);
                     if (responses == null || !responses.ContainsKey("200")) return "object";

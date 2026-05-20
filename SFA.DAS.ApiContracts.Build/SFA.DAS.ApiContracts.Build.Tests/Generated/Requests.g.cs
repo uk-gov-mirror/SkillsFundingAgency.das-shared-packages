@@ -104,6 +104,20 @@ public class PatchDasItemsByItemIdApiRequest : IPatchApiRequest<Microsoft.AspNet
     public Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<DasRequestResponse> Data { get; set; } = default!;
 }
 
+/// <summary>GET /api/das-typed-items/{itemId} &#x2192; <see cref="DasRequestResponse"/></summary>
+public record GetDasTypedItemsByItemIdApiRequest(System.Guid ItemId) : IGetApiRequest
+{
+    public string GetUrl => $"api/das-typed-items/{ItemId}";
+}
+
+/// <summary>PATCH /api/das-typed-items/{itemId} &#x2192; <see cref="PatchDasItemResponse"/></summary>
+public class PatchDasTypedItemsByItemIdApiRequest : IPatchApiRequest<Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<PutDasRequest>>
+{
+    public required System.Guid ItemId { get; init; }
+    public string PatchUrl => $"api/das-typed-items/{ItemId}";
+    public Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<PutDasRequest> Data { get; set; } = default!;
+}
+
 /// <summary>POST /api/das-requests/{dasRequestId}/archive</summary>
 public class PostDasRequestsByDasRequestIdArchiveApiRequest : IPostApiRequest
 {

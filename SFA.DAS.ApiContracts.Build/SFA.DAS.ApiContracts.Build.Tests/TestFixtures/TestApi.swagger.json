@@ -430,6 +430,61 @@
         }
       }
     },
+    "/api/das-typed-items/{itemId}": {
+      "get": {
+        "operationId": "GetDasTypedItemById",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DasRequestResponse" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "PatchDasTypedItem",
+        "x-patch-document-type": "PutDasRequest",
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Operation" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PatchDasItemResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/das-requests/{dasRequestId}/archive": {
       "post": {
         "operationId": "ArchiveDasRequest",
