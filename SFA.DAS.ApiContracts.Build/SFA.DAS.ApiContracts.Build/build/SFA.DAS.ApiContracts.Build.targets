@@ -188,15 +188,78 @@
                 }
 
                 // For PATCH operations: wrap the inferred type in JsonPatchDocument<T>.
-                // If the request body is a named $ref, use that type.
-                // Otherwise infer the type from the 200 response schema.
-                // Always wraps a named type in JsonPatchDocument<T>; falls back to "object".
-                string GetPatchDataType(Dictionary<string,object> op)
+                // Priority order for resolving T:
+                //   1. x-patch-document-type extension — set by an OperationFilter in the API that reads
+                //      the actual JsonPatchDocument<T> parameter type (most accurate).
+                //   2. Named $ref in the request body — use that type directly.
+                //   3. GET response type on the same path — the resource you GET is the one you patch.
+                //   4. PATCH 200 response type — last resort fallback.
+                //   5. "object" — unable to determine type.
+                string GetPatchDataType(Dictionary<string,object> op, Dictionary<string,object> pathItem)
                 {
+                    // Priority 1: explicit x-patch-document-type extension
+                    if (op != null && op.ContainsKey("x-patch-document-type"))
+                    {
+                        string extType = AsStr(op["x-patch-document-type"]);
+                        if (!string.IsNullOrEmpty(extType))
+                            return "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<" + extType + ">";
+                    }
+
+                    // Priority 2: named $ref in the request body
                     string bodyType = GetDataType(op);
                     if (bodyType != "object" && !bodyType.StartsWith("System.Collections.Generic.List<"))
                         return "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<" + bodyType + ">";
 
+                    // Body is a generic list/object — detect whether it is a JSON Patch Operation array.
+                    bool isJsonPatchBody = false;
+                    if (op != null && op.ContainsKey("requestBody"))
+                    {
+                        var rb = AsObj(op["requestBody"]);
+                        var rbContent = rb != null && rb.ContainsKey("content") ? AsObj(rb["content"]) : null;
+                        Dictionary<string,object> rbMedia = null;
+                        if (rbContent != null)
+                        {
+                            if (rbContent.ContainsKey("application/json"))
+                                rbMedia = AsObj(rbContent["application/json"]);
+                            else foreach (var kv in rbContent) { rbMedia = AsObj(kv.Value); break; }
+                        }
+                        var rbSchema = rbMedia != null && rbMedia.ContainsKey("schema") ? AsObj(rbMedia["schema"]) : null;
+                        if (rbSchema != null && GetStr(rbSchema, "type") == "array")
+                        {
+                            var items = rbSchema.ContainsKey("items") ? AsObj(rbSchema["items"]) : null;
+                            if (items != null && items.ContainsKey("$ref"))
+                                isJsonPatchBody = true;
+                        }
+                    }
+
+                    // Priority 3: GET response type on the same path
+                    if (isJsonPatchBody && pathItem != null && pathItem.ContainsKey("get"))
+                    {
+                        var getOp = AsObj(pathItem["get"]);
+                        if (getOp != null && getOp.ContainsKey("responses"))
+                        {
+                            var getResp = AsObj(getOp["responses"]);
+                            var getR200 = getResp != null && getResp.ContainsKey("200") ? AsObj(getResp["200"]) : null;
+                            var getContent = getR200 != null && getR200.ContainsKey("content") ? AsObj(getR200["content"]) : null;
+                            if (getContent != null)
+                            {
+                                Dictionary<string,object> getMedia = null;
+                                if (getContent.ContainsKey("application/json"))
+                                    getMedia = AsObj(getContent["application/json"]);
+                                else foreach (var kv in getContent) { getMedia = AsObj(kv.Value); break; }
+                                var getSchema = getMedia != null && getMedia.ContainsKey("schema") ? AsObj(getMedia["schema"]) : null;
+                                if (getSchema != null && getSchema.ContainsKey("$ref"))
+                                {
+                                    string refStr = AsStr(getSchema["$ref"]);
+                                    int lastSlash = refStr.LastIndexOf('/');
+                                    string typeName = lastSlash >= 0 ? refStr.Substring(lastSlash + 1) : refStr;
+                                    return "Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<" + typeName + ">";
+                                }
+                            }
+                        }
+                    }
+
+                    // Priority 4: PATCH 200 response type
                     if (op == null || !op.ContainsKey("responses")) return "object";
                     var responses = AsObj(op["responses"]);
                     if (responses == null || !responses.ContainsKey("200")) return "object";
@@ -628,7 +691,7 @@
                             }
                             else
                             {
-                                string dataType = httpMethod == "patch" ? GetPatchDataType(op) : GetDataType(op);
+                                string dataType = httpMethod == "patch" ? GetPatchDataType(op, pathItem) : GetDataType(op);
 
                                 // A POST with no requestBody at all uses the non-generic IPostApiRequest.
                                 // GetDataType returns "object" for both absent and unrecognised bodies, so

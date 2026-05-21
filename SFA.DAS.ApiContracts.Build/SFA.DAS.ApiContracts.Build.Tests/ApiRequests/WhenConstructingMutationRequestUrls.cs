@@ -131,6 +131,27 @@ public class WhenConstructingMutationRequestUrls
     }
 
     [Test]
+    public void PatchDasItemsByItemId_UsesGetResponseTypeNotPatchResponseType()
+    {
+        // When the PATCH body is a JSON Patch Operation array and a GET exists on the same path,
+        // the generated Data type should use the GET response type (DasRequestResponse),
+        // not the PATCH 200 response type (PatchDasItemResponse).
+        typeof(PatchDasItemsByItemIdApiRequest)
+            .GetProperty("Data")!.PropertyType
+            .Should().Be(typeof(Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<DasRequestResponse>));
+    }
+
+    [Test]
+    public void PatchDasTypedItemsByItemId_XPatchDocumentTypeExtensionTakesPriority()
+    {
+        // x-patch-document-type on the swagger operation takes priority over both the GET response
+        // type (DasRequestResponse) and the PATCH 200 response type (PatchDasItemResponse).
+        typeof(PatchDasTypedItemsByItemIdApiRequest)
+            .GetProperty("Data")!.PropertyType
+            .Should().Be(typeof(Microsoft.AspNetCore.JsonPatch.SystemTextJson.JsonPatchDocument<PutDasRequest>));
+    }
+
+    [Test]
     public void PutDasRequestsByDasRequestId_IsClassNotRecord()
     {
         typeof(PutDasRequestsByDasRequestIdApiRequest).IsClass.Should().BeTrue();

@@ -131,6 +131,84 @@ public record GetVacanciesByVacancyIdApiRequest(System.Guid VacancyId) : IGetApi
 * **POST / PUT / PATCH request bodies** — typed via the `Data` property; `$ref` and inline array bodies both supported. For POST operations with a named schema body (`$ref`), a primary constructor is generated so the strongly-typed body is passed at construction time: `new PostVacanciesApiRequest(new PostVacancyRequest { ... })`
 * **API versioning** — when `info.version` is anything other than `1.0`, a `Version` property override is emitted
 
+## PATCH Requests
+
+For PATCH operations the generator wraps the body type in `JsonPatchDocument<T>` and emits a class implementing `IPatchApiRequest<JsonPatchDocument<T>>`. The type argument `T` is resolved in the following priority order:
+
+| Priority | Source | What to add to the API |
+|---|---|---|
+| 1 | `x-patch-document-type` extension on the operation | Add an `IOperationFilter` that reads the actual `JsonPatchDocument<T>` parameter and writes `operation.Extensions["x-patch-document-type"] = new OpenApiString(typeof(T).Name)` |
+| 2 | Named `$ref` in the request body | Use a named schema for the body (not an inline `Operation` array) |
+| 3 | GET response type on the same path | Expose a GET on the same path whose 200 response references the resource schema |
+| 4 | PATCH 200 response type | The 200 response schema is used as a last resort |
+| 5 | `object` | No type information could be determined |
+
+### Automatic inference via a sibling GET (Priority 3)
+
+The most common scenario — no extra work required in the API. If the path has a GET operation whose 200 response references a named schema, that schema is used as `T`:
+
+```json
+"/api/vacancies/{vacancyId}": {
+  "get": {
+    "responses": {
+      "200": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VacancyResponse" } } } }
+    }
+  },
+  "patch": {
+    "requestBody": {
+      "content": {
+        "application/json-patch+json": {
+          "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Operation" } }
+        }
+      }
+    }
+  }
+}
+```
+
+Produces:
+
+```csharp
+public class PatchVacanciesByVacancyIdApiRequest : IPatchApiRequest<JsonPatchDocument<VacancyResponse>>
+{
+    public required System.Guid VacancyId { get; init; }
+    public string PatchUrl => $"api/vacancies/{VacancyId}";
+    public JsonPatchDocument<VacancyResponse> Data { get; set; } = default!;
+}
+```
+
+### Explicit type via `x-patch-document-type` (Priority 1)
+
+Use this when `T` should be a type other than the GET response (e.g. a request/command type). Add an `IOperationFilter` to the inner API's Swagger configuration:
+
+```csharp
+public class JsonPatchDocumentOperationFilter : IOperationFilter
+{
+    public void Apply(OpenApiOperation operation, OperationFilterContext context)
+    {
+        var patchParam = context.MethodInfo.GetParameters()
+            .FirstOrDefault(p => p.ParameterType.IsGenericType &&
+                                 p.ParameterType.GetGenericTypeDefinition() == typeof(JsonPatchDocument<>));
+
+        if (patchParam is null) return;
+
+        var documentType = patchParam.ParameterType.GetGenericArguments()[0];
+        operation.Extensions["x-patch-document-type"] = new OpenApiString(documentType.Name);
+    }
+}
+```
+
+Register it in `AddSwaggerGen`:
+
+```csharp
+builder.Services.AddSwaggerGen(options =>
+{
+    options.OperationFilter<JsonPatchDocumentOperationFilter>();
+});
+```
+
+The generated `Data` property will then be `JsonPatchDocument<T>` using the explicit type name, regardless of the GET response schema.
+
 ## Client Generation
 
 Setting `ApiContractsClientName` causes a third file, `Generated/Client.g.cs`, to be generated. This contains a configuration class, a typed interface, a concrete pass-through client, and a DI registration extension.
