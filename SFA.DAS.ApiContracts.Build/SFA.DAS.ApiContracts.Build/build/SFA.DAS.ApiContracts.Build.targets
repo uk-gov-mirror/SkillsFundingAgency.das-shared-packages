@@ -802,6 +802,8 @@
                         {
                             string propName = trimmed.Substring(nameStart, nameEnd - nameStart);
                             outLines.Add(indent + "[System.Text.Json.Serialization.JsonPropertyName(\"" + propName + "\")]");
+                            if (trimmed.Contains("NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore"))
+                                outLines.Add(indent + "[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]");
                         }
                     }
                     else if (trimmed.StartsWith("[Newtonsoft.Json.JsonExtensionData]"))

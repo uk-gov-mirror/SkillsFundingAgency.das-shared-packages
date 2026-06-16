@@ -618,6 +618,10 @@
           "description": {
             "type": "string",
             "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/DasRequestSortOrder",
+            "nullable": true
           }
         }
       },
