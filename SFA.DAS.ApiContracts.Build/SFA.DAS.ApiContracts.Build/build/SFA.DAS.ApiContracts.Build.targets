@@ -810,6 +810,10 @@
                     {
                         outLines.Add(indent + "[System.Text.Json.Serialization.JsonExtensionData]");
                     }
+                    else if (trimmed.StartsWith("[Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]"))
+                    {
+                        outLines.Add(indent + "[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]");
+                    }
                     else if (trimmed.StartsWith("public enum "))
                     {
                         // Enums need a JsonConverter attribute so STJ deserialises them as strings
