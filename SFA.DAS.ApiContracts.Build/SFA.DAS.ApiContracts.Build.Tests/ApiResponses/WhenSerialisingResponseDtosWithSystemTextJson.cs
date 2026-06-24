@@ -53,4 +53,25 @@ public class WhenSerialisingResponseDtosWithSystemTextJson
 
         json.Should().NotContain("\"status\"");
     }
+
+    [Test]
+    public void Then_NonNullable_Bool_Property_Serialises_Without_Throwing()
+    {
+        // WhenWritingNull is invalid on value-type members — the serialiser should not throw.
+        var dto = new PatchDasItemResponse { Id = Guid.NewGuid(), Updated = true };
+
+        var act = () => JsonSerializer.Serialize(dto);
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void Then_NonNullable_Bool_Property_Serialises_With_Value()
+    {
+        var dto = new PatchDasItemResponse { Id = Guid.NewGuid(), Updated = true };
+
+        var json = JsonSerializer.Serialize(dto);
+
+        json.Should().Contain("\"updated\":true");
+    }
 }

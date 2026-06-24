@@ -788,8 +788,44 @@
                 string[] lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                 var outLines = new List<string>();
 
-                foreach (string line in lines)
+                // Non-nullable value types that are incompatible with WhenWritingNull.
+                var nonNullableValueTypes = new System.Collections.Generic.HashSet<string>
                 {
+                    "int", "long", "short", "byte", "sbyte", "uint", "ulong", "ushort",
+                    "bool", "float", "double", "decimal", "char",
+                    "System.DateTime", "System.DateOnly", "System.TimeSpan", "System.Guid"
+                };
+
+                // Scans forward from lineIndex past attribute lines to the property declaration.
+                // Returns (csType, isEnum) where isEnum is true when a StringEnumConverter
+                // attribute is found between the current line and the property declaration.
+                (string, bool) GetPropertyInfo(string[] allLines, int lineIndex)
+                {
+                    bool hasEnumConverter = false;
+                    for (int k = lineIndex + 1; k < allLines.Length && k < lineIndex + 20; k++)
+                    {
+                        string t = allLines[k].TrimStart();
+                        if (t.StartsWith("["))
+                        {
+                            if (t.Contains("Newtonsoft.Json.Converters.StringEnumConverter"))
+                                hasEnumConverter = true;
+                            continue;
+                        }
+                        if (t.StartsWith("public "))
+                        {
+                            string rest = t.Substring("public ".Length);
+                            int sp = rest.IndexOf(' ');
+                            string csType = sp > 0 ? rest.Substring(0, sp) : "";
+                            return (csType, hasEnumConverter);
+                        }
+                        break;
+                    }
+                    return ("", false);
+                }
+
+                for (int idx = 0; idx < lines.Length; idx++)
+                {
+                    string line    = lines[idx];
                     string trimmed = line.TrimStart();
                     string indent  = line.Substring(0, line.Length - trimmed.Length);
 
@@ -803,7 +839,15 @@
                             string propName = trimmed.Substring(nameStart, nameEnd - nameStart);
                             outLines.Add(indent + "[System.Text.Json.Serialization.JsonPropertyName(\"" + propName + "\")]");
                             if (trimmed.Contains("NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore"))
-                                outLines.Add(indent + "[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]");
+                            {
+                                // Only add WhenWritingNull for reference types and nullable value types.
+                                // Non-nullable value types (primitives and enums) are incompatible with WhenWritingNull.
+                                var (propType, isEnum) = GetPropertyInfo(lines, idx);
+                                bool isNonNullableValueType = !propType.EndsWith("?")
+                                    && (isEnum || nonNullableValueTypes.Contains(propType));
+                                if (!isNonNullableValueType)
+                                    outLines.Add(indent + "[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]");
+                            }
                         }
                     }
                     else if (trimmed.StartsWith("[Newtonsoft.Json.JsonExtensionData]"))
