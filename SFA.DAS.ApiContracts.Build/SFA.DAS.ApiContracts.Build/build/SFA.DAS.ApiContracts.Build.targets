@@ -757,8 +757,14 @@
                                     && !isPostWithNamedType
                                     && IsNullableRequestBody(op);
 
+                                // For PUT with a nullable body, implement both IPutApiRequest and IPutApiRequest<object>
+                                // so callers can use either overload on apiClient.
+                                bool isPutWithNullableBody = httpMethod == "put"
+                                    && IsNullableRequestBody(op);
+
                                 string iface = (isPostWithNamedType || isPostWithNoBody) ? "IPostApiRequest"
                                              : isPostWithNullableBody                    ? "IPostApiRequest, IPostApiRequest<object>"
+                                             : isPutWithNullableBody                     ? "IPutApiRequest, IPutApiRequest<object>"
                                              : httpMethod == "post"     ? "IPostApiRequest<"  + dataType + ">"
                                              : httpMethod == "put"      ? "IPutApiRequest<"   + dataType + ">"
                                              :                            "IPatchApiRequest<"  + dataType + ">";
