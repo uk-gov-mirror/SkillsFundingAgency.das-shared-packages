@@ -463,6 +463,7 @@
                 output.AppendLine();
                 output.AppendLine("#nullable enable");
                 output.AppendLine("#pragma warning disable CS1591 // Missing XML comment");
+                output.AppendLine("#pragma warning disable CS8601 // Possible null reference assignment");
                 output.AppendLine("#pragma warning disable CS8618 // Non-nullable property uninitialized");
                 output.AppendLine("#pragma warning disable CS8767 // Nullability mismatch on interface implementation");
                 output.AppendLine();
@@ -757,14 +758,17 @@
                                     && !isPostWithNamedType
                                     && IsNullableRequestBody(op);
 
-                                // For PUT with a nullable body, implement both IPutApiRequest and IPutApiRequest<object>
+                                // PUT always implements both IPutApiRequest<T> (typed) and IPutApiRequest (non-generic)
                                 // so callers can use either overload on apiClient.
-                                bool isPutWithNullableBody = httpMethod == "put"
-                                    && IsNullableRequestBody(op);
+                                // When T is a named type, an explicit IPutApiRequest<object>.Data bridges the type difference.
+                                // When T is object (unresolved/nullable body), both resolve to the same Data property.
+                                bool isPutWithBody = httpMethod == "put" && op.ContainsKey("requestBody");
+                                bool isPutWithNamedType = isPutWithBody && dataType != "object" && !dataType.Contains("<");
 
                                 string iface = (isPostWithNamedType || isPostWithNoBody) ? "IPostApiRequest"
                                              : isPostWithNullableBody                    ? "IPostApiRequest, IPostApiRequest<object>"
-                                             : isPutWithNullableBody                     ? "IPutApiRequest, IPutApiRequest<object>"
+                                             : isPutWithNamedType                        ? "IPutApiRequest<" + dataType + ">, IPutApiRequest"
+                                             : isPutWithBody                             ? "IPutApiRequest, IPutApiRequest<object>"
                                              : httpMethod == "post"     ? "IPostApiRequest<"  + dataType + ">"
                                              : httpMethod == "put"      ? "IPutApiRequest<"   + dataType + ">"
                                              :                            "IPatchApiRequest<"  + dataType + ">";
@@ -796,6 +800,10 @@
                                 else
                                 {
                                     output.AppendLine("    public " + dataType + " Data { get; set; } = default!;");
+                                    // Explicit bridge so IPutApiRequest<object>.Data (from non-generic IPutApiRequest)
+                                    // is satisfied without conflicting with the typed Data property above.
+                                    if (isPutWithNamedType)
+                                        output.AppendLine("    object? IPutApiRequest<object>.Data { get => Data; set => Data = value as " + dataType + "; }");
                                 }
                                 if (apiVersion != "1.0")
                                     output.AppendLine("    public string Version => \"" + apiVersion + "\";");
