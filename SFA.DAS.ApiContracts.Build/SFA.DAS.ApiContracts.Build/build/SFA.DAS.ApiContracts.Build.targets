@@ -187,6 +187,43 @@
                     return "object";
                 }
 
+                // Returns true when the request body schema is nullable — i.e. it uses
+                // oneOf/anyOf with one branch being {type:null}.  These endpoints accept
+                // an optional body, so we generate a class implementing both
+                // IPostApiRequest (no body) and IPostApiRequest<object> (with body).
+                bool IsNullableRequestBody(Dictionary<string,object> op)
+                {
+                    if (op == null || !op.ContainsKey("requestBody")) return false;
+                    var rb = AsObj(op["requestBody"]);
+                    if (rb == null) return false;
+                    var content = rb.ContainsKey("content") ? AsObj(rb["content"]) : null;
+                    if (content == null) return false;
+
+                    Dictionary<string,object> media = null;
+                    if (content.ContainsKey("application/json"))
+                        media = AsObj(content["application/json"]);
+                    else foreach (var kv in content) { media = AsObj(kv.Value); break; }
+                    if (media == null) return false;
+
+                    var schema = media.ContainsKey("schema") ? AsObj(media["schema"]) : null;
+                    if (schema == null) return false;
+
+                    // Check for oneOf/anyOf containing a {type:null} branch
+                    foreach (string keyword in new[] { "oneOf", "anyOf" })
+                    {
+                        if (!schema.ContainsKey(keyword)) continue;
+                        var branches = AsArr(schema[keyword]);
+                        if (branches == null) continue;
+                        foreach (object b in branches)
+                        {
+                            var branch = AsObj(b);
+                            if (branch != null && GetStr(branch, "type") == "null")
+                                return true;
+                        }
+                    }
+                    return false;
+                }
+
                 // For PATCH operations: wrap the inferred type in JsonPatchDocument<T>.
                 // Priority order for resolving T:
                 //   1. x-patch-document-type extension — set by an OperationFilter in the API that reads
@@ -452,6 +489,12 @@
                             rawVer = rawVer.Substring(1);
                         if (rawVer.Length > 0 && !rawVer.Contains('.'))
                             rawVer += ".0";
+                        // Normalize three-part semver (e.g. "1.0.0") to major.minor (e.g. "1.0")
+                        {
+                            string[] parts = rawVer.Split('.');
+                            if (parts.Length > 2)
+                                rawVer = parts[0] + "." + parts[1];
+                        }
                         if (!string.IsNullOrEmpty(rawVer))
                             apiVersion = rawVer;
                     }
@@ -706,7 +749,16 @@
                                     && dataType != "object"
                                     && !dataType.Contains("<");
 
+                                // For POST with a nullable body (oneOf: null | object), implement both
+                                // IPostApiRequest (no-body path) and IPostApiRequest<object> (with-body path)
+                                // so callers can use either overload on apiClient.
+                                bool isPostWithNullableBody = httpMethod == "post"
+                                    && !isPostWithNoBody
+                                    && !isPostWithNamedType
+                                    && IsNullableRequestBody(op);
+
                                 string iface = (isPostWithNamedType || isPostWithNoBody) ? "IPostApiRequest"
+                                             : isPostWithNullableBody                    ? "IPostApiRequest, IPostApiRequest<object>"
                                              : httpMethod == "post"     ? "IPostApiRequest<"  + dataType + ">"
                                              : httpMethod == "put"      ? "IPutApiRequest<"   + dataType + ">"
                                              :                            "IPatchApiRequest<"  + dataType + ">";

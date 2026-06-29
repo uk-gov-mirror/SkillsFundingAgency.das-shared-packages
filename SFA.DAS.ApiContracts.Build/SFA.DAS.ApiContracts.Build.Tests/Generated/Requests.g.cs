@@ -126,6 +126,14 @@ public class PostDasRequestsByDasRequestIdArchiveApiRequest : IPostApiRequest
     public object Data { get; set; } = default!;
 }
 
+/// <summary>POST /api/das-requests/{dasRequestId}/notify</summary>
+public class PostDasRequestsByDasRequestIdNotifyApiRequest : IPostApiRequest, IPostApiRequest<object>
+{
+    public required System.Guid DasRequestId { get; init; }
+    public string PostUrl => $"api/das-requests/{DasRequestId}/notify";
+    public object Data { get; set; } = default!;
+}
+
 /// <summary>GET /api/das-requests/{dasRequestId}/items</summary>
 public record GetDasRequestsByDasRequestIdItemsApiRequest(System.Guid DasRequestId, List<DasRequestSortOrder>? Status, List<string>? Tags, int? Page) : IGetApiRequest
 {
