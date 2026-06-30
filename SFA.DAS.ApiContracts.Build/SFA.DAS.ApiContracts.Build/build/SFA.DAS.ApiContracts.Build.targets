@@ -187,6 +187,43 @@
                     return "object";
                 }
 
+                // Returns true when the request body schema is nullable — i.e. it uses
+                // oneOf/anyOf with one branch being {type:null}.  These endpoints accept
+                // an optional body, so we generate a class implementing both
+                // IPostApiRequest (no body) and IPostApiRequest<object> (with body).
+                bool IsNullableRequestBody(Dictionary<string,object> op)
+                {
+                    if (op == null || !op.ContainsKey("requestBody")) return false;
+                    var rb = AsObj(op["requestBody"]);
+                    if (rb == null) return false;
+                    var content = rb.ContainsKey("content") ? AsObj(rb["content"]) : null;
+                    if (content == null) return false;
+
+                    Dictionary<string,object> media = null;
+                    if (content.ContainsKey("application/json"))
+                        media = AsObj(content["application/json"]);
+                    else foreach (var kv in content) { media = AsObj(kv.Value); break; }
+                    if (media == null) return false;
+
+                    var schema = media.ContainsKey("schema") ? AsObj(media["schema"]) : null;
+                    if (schema == null) return false;
+
+                    // Check for oneOf/anyOf containing a {type:null} branch
+                    foreach (string keyword in new[] { "oneOf", "anyOf" })
+                    {
+                        if (!schema.ContainsKey(keyword)) continue;
+                        var branches = AsArr(schema[keyword]);
+                        if (branches == null) continue;
+                        foreach (object b in branches)
+                        {
+                            var branch = AsObj(b);
+                            if (branch != null && GetStr(branch, "type") == "null")
+                                return true;
+                        }
+                    }
+                    return false;
+                }
+
                 // For PATCH operations: wrap the inferred type in JsonPatchDocument<T>.
                 // Priority order for resolving T:
                 //   1. x-patch-document-type extension — set by an OperationFilter in the API that reads
@@ -426,6 +463,7 @@
                 output.AppendLine();
                 output.AppendLine("#nullable enable");
                 output.AppendLine("#pragma warning disable CS1591 // Missing XML comment");
+                output.AppendLine("#pragma warning disable CS8601 // Possible null reference assignment");
                 output.AppendLine("#pragma warning disable CS8618 // Non-nullable property uninitialized");
                 output.AppendLine("#pragma warning disable CS8767 // Nullability mismatch on interface implementation");
                 output.AppendLine();
@@ -452,6 +490,12 @@
                             rawVer = rawVer.Substring(1);
                         if (rawVer.Length > 0 && !rawVer.Contains('.'))
                             rawVer += ".0";
+                        // Normalize three-part semver (e.g. "1.0.0") to major.minor (e.g. "1.0")
+                        {
+                            string[] parts = rawVer.Split('.');
+                            if (parts.Length > 2)
+                                rawVer = parts[0] + "." + parts[1];
+                        }
                         if (!string.IsNullOrEmpty(rawVer))
                             apiVersion = rawVer;
                     }
@@ -706,7 +750,25 @@
                                     && dataType != "object"
                                     && !dataType.Contains("<");
 
+                                // For POST with a nullable body (oneOf: null | object), implement both
+                                // IPostApiRequest (no-body path) and IPostApiRequest<object> (with-body path)
+                                // so callers can use either overload on apiClient.
+                                bool isPostWithNullableBody = httpMethod == "post"
+                                    && !isPostWithNoBody
+                                    && !isPostWithNamedType
+                                    && IsNullableRequestBody(op);
+
+                                // PUT always implements both IPutApiRequest<T> (typed) and IPutApiRequest (non-generic)
+                                // so callers can use either overload on apiClient.
+                                // When T is a named type, an explicit IPutApiRequest<object>.Data bridges the type difference.
+                                // When T is object (unresolved/nullable body), both resolve to the same Data property.
+                                bool isPutWithBody = httpMethod == "put" && op.ContainsKey("requestBody");
+                                bool isPutWithNamedType = isPutWithBody && dataType != "object" && !dataType.Contains("<");
+
                                 string iface = (isPostWithNamedType || isPostWithNoBody) ? "IPostApiRequest"
+                                             : isPostWithNullableBody                    ? "IPostApiRequest, IPostApiRequest<object>"
+                                             : isPutWithNamedType                        ? "IPutApiRequest<" + dataType + ">, IPutApiRequest"
+                                             : isPutWithBody                             ? "IPutApiRequest, IPutApiRequest<object>"
                                              : httpMethod == "post"     ? "IPostApiRequest<"  + dataType + ">"
                                              : httpMethod == "put"      ? "IPutApiRequest<"   + dataType + ">"
                                              :                            "IPatchApiRequest<"  + dataType + ">";
@@ -738,6 +800,10 @@
                                 else
                                 {
                                     output.AppendLine("    public " + dataType + " Data { get; set; } = default!;");
+                                    // Explicit bridge so IPutApiRequest<object>.Data (from non-generic IPutApiRequest)
+                                    // is satisfied without conflicting with the typed Data property above.
+                                    if (isPutWithNamedType)
+                                        output.AppendLine("    object? IPutApiRequest<object>.Data { get => Data; set => Data = value as " + dataType + "; }");
                                 }
                                 if (apiVersion != "1.0")
                                     output.AppendLine("    public string Version => \"" + apiVersion + "\";");
@@ -788,8 +854,44 @@
                 string[] lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                 var outLines = new List<string>();
 
-                foreach (string line in lines)
+                // Non-nullable value types that are incompatible with WhenWritingNull.
+                var nonNullableValueTypes = new System.Collections.Generic.HashSet<string>
                 {
+                    "int", "long", "short", "byte", "sbyte", "uint", "ulong", "ushort",
+                    "bool", "float", "double", "decimal", "char",
+                    "System.DateTime", "System.DateOnly", "System.TimeSpan", "System.Guid"
+                };
+
+                // Scans forward from lineIndex past attribute lines to the property declaration.
+                // Returns (csType, isEnum) where isEnum is true when a StringEnumConverter
+                // attribute is found between the current line and the property declaration.
+                (string, bool) GetPropertyInfo(string[] allLines, int lineIndex)
+                {
+                    bool hasEnumConverter = false;
+                    for (int k = lineIndex + 1; k < allLines.Length && k < lineIndex + 20; k++)
+                    {
+                        string t = allLines[k].TrimStart();
+                        if (t.StartsWith("["))
+                        {
+                            if (t.Contains("Newtonsoft.Json.Converters.StringEnumConverter"))
+                                hasEnumConverter = true;
+                            continue;
+                        }
+                        if (t.StartsWith("public "))
+                        {
+                            string rest = t.Substring("public ".Length);
+                            int sp = rest.IndexOf(' ');
+                            string csType = sp > 0 ? rest.Substring(0, sp) : "";
+                            return (csType, hasEnumConverter);
+                        }
+                        break;
+                    }
+                    return ("", false);
+                }
+
+                for (int idx = 0; idx < lines.Length; idx++)
+                {
+                    string line    = lines[idx];
                     string trimmed = line.TrimStart();
                     string indent  = line.Substring(0, line.Length - trimmed.Length);
 
@@ -802,11 +904,25 @@
                         {
                             string propName = trimmed.Substring(nameStart, nameEnd - nameStart);
                             outLines.Add(indent + "[System.Text.Json.Serialization.JsonPropertyName(\"" + propName + "\")]");
+                            if (trimmed.Contains("NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore"))
+                            {
+                                // Only add WhenWritingNull for reference types and nullable value types.
+                                // Non-nullable value types (primitives and enums) are incompatible with WhenWritingNull.
+                                var (propType, isEnum) = GetPropertyInfo(lines, idx);
+                                bool isNonNullableValueType = !propType.EndsWith("?")
+                                    && (isEnum || nonNullableValueTypes.Contains(propType));
+                                if (!isNonNullableValueType)
+                                    outLines.Add(indent + "[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]");
+                            }
                         }
                     }
                     else if (trimmed.StartsWith("[Newtonsoft.Json.JsonExtensionData]"))
                     {
                         outLines.Add(indent + "[System.Text.Json.Serialization.JsonExtensionData]");
+                    }
+                    else if (trimmed.StartsWith("[Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]"))
+                    {
+                        outLines.Add(indent + "[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]");
                     }
                     else if (trimmed.StartsWith("public enum "))
                     {

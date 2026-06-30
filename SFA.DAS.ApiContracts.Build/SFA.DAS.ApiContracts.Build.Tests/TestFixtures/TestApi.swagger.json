@@ -502,6 +502,70 @@
         "responses": { "204": { "description": "No Content" } }
       }
     },
+    "/api/das-requests/{dasRequestId}/update-optional": {
+      "put": {
+        "operationId": "UpdateDasRequestOptional",
+        "parameters": [
+          {
+            "name": "dasRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "No Content" } }
+      }
+    },
+    "/api/das-requests/{dasRequestId}/notify": {
+      "post": {
+        "operationId": "NotifyDasRequest",
+        "parameters": [
+          {
+            "name": "dasRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "No Content" } }
+      }
+    },
     "/api/das-requests/{dasRequestId}/items": {
       "get": {
         "tags": [
@@ -617,6 +681,10 @@
           },
           "description": {
             "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/DasRequestSortOrder",
             "nullable": true
           }
         }

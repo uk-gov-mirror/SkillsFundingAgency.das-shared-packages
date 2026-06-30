@@ -3,6 +3,7 @@
 
 #nullable enable
 #pragma warning disable CS1591 // Missing XML comment
+#pragma warning disable CS8601 // Possible null reference assignment
 #pragma warning disable CS8618 // Non-nullable property uninitialized
 #pragma warning disable CS8767 // Nullability mismatch on interface implementation
 
@@ -22,11 +23,12 @@ public record GetDasRequestsByDasRequestIdApiRequest(System.Guid DasRequestId) :
 }
 
 /// <summary>PUT /api/das-requests/{dasRequestId}</summary>
-public class PutDasRequestsByDasRequestIdApiRequest : IPutApiRequest<PutDasRequest>
+public class PutDasRequestsByDasRequestIdApiRequest : IPutApiRequest<PutDasRequest>, IPutApiRequest
 {
     public required System.Guid DasRequestId { get; init; }
     public string PutUrl => $"api/das-requests/{DasRequestId}";
     public PutDasRequest Data { get; set; } = default!;
+    object? IPutApiRequest<object>.Data { get => Data; set => Data = value as PutDasRequest; }
     public string Version => "2.0";
 }
 
