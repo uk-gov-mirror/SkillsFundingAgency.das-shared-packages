@@ -14,7 +14,7 @@ using SFA.DAS.GovUK.SampleSite.Models;
 
 namespace SFA.DAS.GovUK.SampleSite.Controllers
 {
-    [AllowAnonymous]
+    [Authorize]
     [Route("stub", Name = "Stub", Order = 0)]
     public class StubController : Controller
     {
@@ -73,7 +73,6 @@ namespace SFA.DAS.GovUK.SampleSite.Controllers
             return RedirectToRoute("SignedIn-stub", new { model.ReturnUrl });
         }
 
-        [Authorize]
         [HttpGet]
         [Route("signed-in-stub", Name = "SignedIn-stub")]
         public IActionResult SignedInStub(string returnUrl)
