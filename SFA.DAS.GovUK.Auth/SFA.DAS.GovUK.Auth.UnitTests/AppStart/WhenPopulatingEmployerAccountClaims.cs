@@ -31,13 +31,15 @@ public class WhenPopulatingAccountClaims
         var tokenValidatedContext = ArrangeTokenValidatedContext(nameIdentifier, emailAddress);
         accountService.Setup(x => x.GetUserAccounts(nameIdentifier, emailAddress)).ReturnsAsync(accountData);
 
+        handler.MaxPermittedNumberOfAccountsOnClaim = accountData.EmployerAccounts.Count();
+
         var actual = await handler.GetClaims(tokenValidatedContext);
 
         accountService.Verify(x => x.GetUserAccounts(nameIdentifier, emailAddress), Times.Once);
         actual.Should().ContainSingle(c => c.Type.Equals(EmployerClaims.AccountsClaimsTypeIdentifier));
         var actualClaimValue = actual.First(c => c.Type.Equals(EmployerClaims.AccountsClaimsTypeIdentifier)).Value;
         actual.FirstOrDefault(c => c.Type.Equals(ClaimTypes.AuthorizationDecision))?.Value?.Should().BeNullOrEmpty();
-        JsonConvert.SerializeObject(accountData.EmployerAccounts.ToDictionary(k => k.AccountId)).Should().Be(actualClaimValue);
+        actualClaimValue.Should().Be(JsonConvert.SerializeObject(accountData.EmployerAccounts.ToDictionary(k => k.AccountId)));
         actual.First(c => c.Type.Equals(EmployerClaims.IdamsUserIdClaimTypeIdentifier)).Value.Should().Be(accountData.EmployerUserId);
         actual.First(c => c.Type.Equals(EmployerClaims.IdamsUserEmailClaimTypeIdentifier)).Value.Should().Be(emailAddress);
         actual.First(c => c.Type.Equals(EmployerClaims.GivenName)).Value.Should().Be(accountData.FirstName);
