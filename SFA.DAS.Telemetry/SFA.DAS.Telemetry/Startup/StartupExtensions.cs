@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Linq;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.DependencyInjection;
 using SFA.DAS.Telemetry.RedactionService;
@@ -12,13 +11,7 @@ namespace SFA.DAS.Telemetry.Startup
         public static IServiceCollection AddTelemetryUriRedaction(this IServiceCollection serviceCollection, string keysForRedaction)
         {
             serviceCollection.AddSingleton<ITelemetryInitializer, UriRedactionTelemetryInitializer>();
-
-            var options = new UriRedactionOptions
-            {
-                RedactionList = keysForRedaction.Split(",", StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToList()
-            };
-
-            serviceCollection.AddSingleton<IUriRedactionService, UriRedactionService>(s => new UriRedactionService(options));
+            serviceCollection.AddSingleton<IUriRedactionService>(_ => new UriRedactionService(UriRedactionOptionsFactory.Create(keysForRedaction)));
             return serviceCollection;
         }
 
