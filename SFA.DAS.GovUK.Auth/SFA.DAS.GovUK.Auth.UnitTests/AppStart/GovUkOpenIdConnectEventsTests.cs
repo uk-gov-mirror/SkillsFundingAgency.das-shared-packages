@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -79,7 +80,7 @@ namespace SFA.DAS.GovUK.Auth.UnitTests.AppStart
         }
 
         [Test]
-        public async Task RedirectToIdentityProvider_AddsVtrAndClaims_WhenEnableVerify()
+        public async Task RedirectToIdentityProvider_AddsVtrAndClaims_WhenVerifyEnabled()
         {
             var properties = new AuthenticationProperties(new Dictionary<string, string?>
             {
@@ -92,6 +93,70 @@ namespace SFA.DAS.GovUK.Auth.UnitTests.AppStart
 
             context.ProtocolMessage.Parameters["vtr"].Should().NotBeNull();
             context.ProtocolMessage.Parameters["claims"].Should().Contain("userinfo");
+        }
+
+        [Test]
+        public async Task RedirectToIdentityProvider_JarContainsVerifyVtrAndClaimsAsJsonObject_WhenVerifyEnabled()
+        {
+            var properties = new AuthenticationProperties(new Dictionary<string, string?>
+            {
+                ["enableVerify"] = "true"
+            });
+
+            var message = new OpenIdConnectMessage
+            {
+                ResponseType = "code",
+                ClientId = "test-client-id",
+                RedirectUri = "https://localhost/sign-in",
+                Scope = "openid email phone",
+                Nonce = "test-nonce"
+            };
+
+            var context = BuildRedirectContext(properties, message);
+
+            await _sut.RedirectToIdentityProvider(context);
+
+            using var payload = ReadJarPayload(context);
+
+            var root = payload.RootElement;
+
+            root.GetProperty("vtr")[0].GetString().Should().Be("Cl.Cm.P2");
+
+            var claims = root.GetProperty("claims");
+            claims.ValueKind.Should().Be(JsonValueKind.Object);
+
+            var userInfo = claims.GetProperty("userinfo");
+            userInfo.ValueKind.Should().Be(JsonValueKind.Object);
+
+            userInfo.TryGetProperty("https://vocab.account.gov.uk/v1/coreIdentityJWT", out _)
+                .Should().BeTrue();
+
+            userInfo.TryGetProperty("https://vocab.account.gov.uk/v1/address", out _)
+                .Should().BeTrue();
+        }
+
+        [Test]
+        public async Task RedirectToIdentityProvider_JarContainsStandardVtrAndNoClaims_WhenVerifyNotEnabled()
+        {
+            var message = new OpenIdConnectMessage
+            {
+                ResponseType = "code",
+                ClientId = "test-client-id",
+                RedirectUri = "https://localhost/sign-in",
+                Scope = "openid email phone",
+                Nonce = "test-nonce"
+            };
+
+            var context = BuildRedirectContext(protocolMessage: message);
+
+            await _sut.RedirectToIdentityProvider(context);
+
+            using var payload = ReadJarPayload(context);
+
+            var root = payload.RootElement;
+
+            root.GetProperty("vtr")[0].GetString().Should().Be("Cl.Cm");
+            root.TryGetProperty("claims", out _).Should().BeFalse();
         }
 
         [Test]
@@ -338,6 +403,14 @@ namespace SFA.DAS.GovUK.Auth.UnitTests.AppStart
         {
             var jarToken = context.ProtocolMessage.Parameters["request"];
             return new JwtSecurityTokenHandler().ReadJwtToken(jarToken);
+        }
+
+        private static JsonDocument ReadJarPayload(RedirectContext context)
+        {
+            var jwt = ReadJar(context);
+            var payloadJson = Base64UrlEncoder.Decode(jwt.EncodedPayload);
+
+            return JsonDocument.Parse(payloadJson);
         }
     }
 }

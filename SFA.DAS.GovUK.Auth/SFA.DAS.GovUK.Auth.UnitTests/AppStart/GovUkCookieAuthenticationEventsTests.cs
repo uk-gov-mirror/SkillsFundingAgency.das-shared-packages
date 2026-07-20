@@ -343,10 +343,10 @@ namespace SFA.DAS.GovUK.Auth.UnitTests.AppStart
         }
 
         private static GovUkName CreateHistoricalName(
-            string givenName,
-            string familyName,
-            string validFrom,
-            string validUntil)
+            string? givenName,
+            string? familyName,
+            string? validFrom,
+            string? validUntil)
         {
             var nameParts = new List<GovUkNamePart>();
 

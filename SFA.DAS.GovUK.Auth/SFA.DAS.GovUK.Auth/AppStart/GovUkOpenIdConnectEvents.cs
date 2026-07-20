@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
-using Newtonsoft.Json.Linq;
 using SFA.DAS.GovUK.Auth.Configuration;
 using SFA.DAS.GovUK.Auth.Extensions;
 using SFA.DAS.GovUK.Auth.Models;
@@ -58,24 +57,22 @@ namespace SFA.DAS.GovUK.Auth.AppStart
             var enableVerify = AuthenticationExtension.EnableVerify(_config, context.Properties);
 
             var vtr = disable2Fa ? "Cl" : "Cl.Cm";
-            var stringVtr = JsonSerializer.Serialize(new List<string>
-                            {
-                                enableVerify ? vtr + ".P2" : vtr
-                            });
-
-            if (context.ProtocolMessage.Parameters.ContainsKey("vtr"))
+            var vtrValues = new List<string>
             {
-                context.ProtocolMessage.Parameters.Remove("vtr");
-            }
+                enableVerify ? $"{vtr}.P2" : vtr
+            };
 
-            context.ProtocolMessage.Parameters.Add("vtr", stringVtr);
+            context.ProtocolMessage.Parameters.Remove("vtr");
+            context.ProtocolMessage.Parameters.Add("vtr", JsonSerializer.Serialize(vtrValues));
+
+            Dictionary<string, Dictionary<string, object>> claimsValues = null;
 
             if (enableVerify)
             {
                 var userInfoClaimKeys = _config.RequestedUserInfoClaims
                     .Split(",", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-                var claims = new Dictionary<string, Dictionary<string, object>>
+                claimsValues = new Dictionary<string, Dictionary<string, object>>
                 {
                     ["userinfo"] = new Dictionary<string, object>()
                 };
@@ -87,28 +84,35 @@ namespace SFA.DAS.GovUK.Auth.AppStart
                         var description = enumValue.GetDescription();
                         if (!string.IsNullOrEmpty(description))
                         {
-                            claims["userinfo"][description] = null;
+                            claimsValues["userinfo"][description] = null;
                         }
                     }
                 }
 
-                context.ProtocolMessage.Parameters.Add("claims", JsonSerializer.Serialize(claims));
+                context.ProtocolMessage.Parameters.Remove("claims");
+                context.ProtocolMessage.Parameters.Add("claims", JsonSerializer.Serialize(claimsValues));
             }
 
             var jarState = context.Options.StateDataFormat.Protect(
                 new AuthenticationProperties(new Dictionary<string, string>(context.Properties.Items))
-            {
-                Items =
                 {
-                    [OpenIdConnectDefaults.RedirectUriForCodePropertiesKey] = context.ProtocolMessage.RedirectUri
-                }
-            });
+                    Items =
+                    {
+                        [OpenIdConnectDefaults.RedirectUriForCodePropertiesKey] = context.ProtocolMessage.RedirectUri
+                    }
+                });
 
-            context.ProtocolMessage.Parameters["request"] = CreateJarRequestObject(context, jarState);
+            context.ProtocolMessage.Parameters["request"] = 
+                CreateJarRequestObject(context, jarState, vtrValues, claimsValues);
+            
             return Task.CompletedTask;
         }
 
-        private string CreateJarRequestObject(RedirectContext context, string state)
+        private string CreateJarRequestObject(
+            RedirectContext context,
+            string state,
+            List<string> vtrValues,
+            Dictionary<string, Dictionary<string, object>> claims)
         {
             var msg = context.ProtocolMessage;
             var now = DateTime.UtcNow;
@@ -127,17 +131,15 @@ namespace SFA.DAS.GovUK.Auth.AppStart
                 ["scope"] = msg.Scope,
                 ["state"] = state,
                 ["nonce"] = msg.Nonce,
-                ["ui_locales"] = "en"
+                ["ui_locales"] = "en",
+                ["vtr"] = ToJsonElement(vtrValues)
             };
 
-            if (msg.Parameters.TryGetValue("vtr", out var vtrJson))
+            if (claims != null)
             {
-                payload["vtr"] = JArray.Parse(vtrJson);
+                payload["claims"] = ToJsonElement(claims);
             }
-            if (msg.Parameters.TryGetValue("claims", out var claimsJson))
-            {
-                payload["claims"] = JObject.Parse(claimsJson);
-            }
+
             if (msg.Parameters.TryGetValue("code_challenge", out var codeChallenge))
             {
                 payload["code_challenge"] = codeChallenge;
@@ -158,10 +160,10 @@ namespace SFA.DAS.GovUK.Auth.AppStart
                 context.Properties?.StoreTokens(
                 [
                     new AuthenticationToken
-                                    {
-                                        Name = OpenIdConnectParameterNames.IdToken,
-                                        Value = idToken
-                                    }
+                    {
+                        Name = OpenIdConnectParameterNames.IdToken,
+                        Value = idToken
+                    }
                 ]);
             }
 
@@ -178,9 +180,9 @@ namespace SFA.DAS.GovUK.Auth.AppStart
             {
                 context.Properties.StoreTokens(new[]
                 {
-                                    new AuthenticationToken { Name = "access_token", Value = token.AccessToken },
-                                    new AuthenticationToken { Name = "id_token", Value = token.IdToken },
-                                });
+                    new AuthenticationToken { Name = "access_token", Value = token.AccessToken },
+                    new AuthenticationToken { Name = "id_token", Value = token.IdToken },
+                });
 
                 context.HandleCodeRedemption(token.AccessToken, token.IdToken);
             }
@@ -200,6 +202,15 @@ namespace SFA.DAS.GovUK.Auth.AppStart
 
             context.Properties ??= new AuthenticationProperties();
             context.Properties.Items["suspended_redirect"] = _suspendedRedirectUrl;
+        }
+
+        private static JsonElement ToJsonElement<T>(T value)
+        {
+            var json = JsonSerializer.Serialize(value);
+
+            using var document = JsonDocument.Parse(json);
+
+            return document.RootElement.Clone();
         }
     }
 }
