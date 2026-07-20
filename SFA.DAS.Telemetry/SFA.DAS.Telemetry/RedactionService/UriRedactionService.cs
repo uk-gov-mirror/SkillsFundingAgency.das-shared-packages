@@ -16,11 +16,21 @@ namespace SFA.DAS.Telemetry.RedactionService
 
         public Uri GetRedactedUri(Uri uri)
         {
+            if (string.IsNullOrEmpty(uri.Query) || uri.Query == "?*")
+            {
+                // the default MS redactor in .Net 9+ will reduce the query to ?*
+                return uri;
+            }
+
             var components = HttpUtility.ParseQueryString(uri.Query);
 
-            var keysToRedact = _options.RedactionList.Select(x => x.ToLower());
+            var keysToRedact = _options.RedactionList
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var redactionList = components.AllKeys.Where(key => keysToRedact.Contains(key.ToLower())).ToList();
+            var redactionList = components.AllKeys
+                .Where(key => !string.IsNullOrWhiteSpace(key) && keysToRedact.Contains(key))
+                .ToList();
 
             foreach (var redaction in redactionList)
             {
