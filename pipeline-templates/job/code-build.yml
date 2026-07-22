@@ -69,9 +69,7 @@ jobs:
 - ${{ elseif ne(parameters.DotNetStandardPackagesToPack, '') }}:
   - job: CliCodeBuild
     pool:
-      name: DAS - Continuous Integration Beta
-      demands:
-        - Agent.OS -equals Linux
+      name: DAS - Continuous Integration Agents
     variables:
     - group: BUILD Management Resources
     - name: buildConfiguration
