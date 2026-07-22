@@ -5,32 +5,84 @@ namespace SFA.DAS.Telemetry.UnitTests
 {
     public class RedactionServiceTests
     {
+        private UriRedactionService _sut;
+
         [SetUp]
         public void Setup()
         {
-        }
-
-        [TestCase("http://www.google.com", "http://www.google.com")]
-        [TestCase("http://www.google.com?colour=blue", "http://www.google.com?colour=blue")]
-        [TestCase("http://www.google.com?email=chris@private.com", "http://www.google.com?email=REDACTED")]
-        [TestCase("http://www.google.com?email=chris@private.com,john@alsohere.com", "http://www.google.com?email=REDACTED")]
-        [TestCase("http://www.google.com?email=chris@private.com&isRobot=false", "http://www.google.com?email=REDACTED&isRobot=false")]
-        [TestCase("http://www.google.com?isRobot=false&email=chris@private.com", "http://www.google.com?isRobot=false&email=REDACTED")]
-        [TestCase("http://www.google.com?Email=chris@private.com", "http://www.google.com?Email=REDACTED")]
-        [TestCase("http://www.google.com?Email=chris@private.com&dateofBirth=2019-11-10", "http://www.google.com?Email=REDACTED&dateofBirth=REDACTED")]
-        public void TestRedaction(string originalUri, string expectedUri)
-        {
-            var uri = new Uri(originalUri);
-
             var options = new UriRedactionOptions
             {
-                RedactionList = new List<string> { "email", "dateOfBirth" }
+                RedactionList = new List<string>
+                {
+                    "email",
+                    "dateOfBirth"
+                }
             };
 
-            var service = new UriRedactionService(options);
+            _sut = new UriRedactionService(options);
+        }
 
-            var result = service.GetRedactedUri(uri);
+        [TestCase(
+            "http://www.google.com",
+            "http://www.google.com")]
+        [TestCase(
+            "http://www.google.com?*",
+            "http://www.google.com?*")]
+        [TestCase(
+            "http://www.google.com?colour=blue",
+            "http://www.google.com?colour=blue")]
+        [TestCase(
+            "http://www.google.com?email=chris@private.com",
+            "http://www.google.com?email=REDACTED")]
+        [TestCase(
+            "http://www.google.com?email=chris@private.com,john@alsohere.com",
+            "http://www.google.com?email=REDACTED")]
+        [TestCase(
+            "http://www.google.com?email=chris@private.com&isRobot=false",
+            "http://www.google.com?email=REDACTED&isRobot=false")]
+        [TestCase(
+            "http://www.google.com?isRobot=false&email=chris@private.com",
+            "http://www.google.com?isRobot=false&email=REDACTED")]
+        [TestCase(
+            "http://www.google.com?Email=chris@private.com",
+            "http://www.google.com?Email=REDACTED")]
+        [TestCase(
+            "http://www.google.com?Email=chris@private.com&dateofBirth=2019-11-10",
+            "http://www.google.com?Email=REDACTED&dateofBirth=REDACTED")]
+        [TestCase(
+            "http://www.google.com?unkeyed&email=chris@private.com",
+            "http://www.google.com?unkeyed&email=REDACTED")]
+        public void GetRedactedUri_ReturnsExpectedUri(
+            string originalUri,
+            string expectedUri)
+        {
+            var result = _sut.GetRedactedUri(new Uri(originalUri));
+
             Assert.That(result, Is.EqualTo(new Uri(expectedUri)));
+        }
+
+        [Test]
+        public void GetRedactedUri_IgnoresInvalidRedactionKeys()
+        {
+            var options = new UriRedactionOptions
+            {
+                RedactionList = new List<string>
+                {
+                    null!,
+                    string.Empty,
+                    " ",
+                    "email"
+                }
+            };
+
+            _sut = new UriRedactionService(options);
+
+            var result = _sut.GetRedactedUri(
+                new Uri("http://www.google.com?email=chris@private.com"));
+
+            Assert.That(
+                result,
+                Is.EqualTo(new Uri("http://www.google.com?email=REDACTED")));
         }
     }
 }
