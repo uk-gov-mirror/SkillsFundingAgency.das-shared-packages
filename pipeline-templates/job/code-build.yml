@@ -26,7 +26,7 @@ jobs:
         inputs:
           SonarCloud: ESFA - SonarCloud
           organization: $(SonarCloudOrganisationKey)
-          scannerMode: MSBuild
+          scannerMode: dotnet
           projectName: "$(Build.DefinitionName)"
           projectKey: ${{ parameters.SonarCloudProjectKey }}
       - task: NuGetToolInstaller@0
