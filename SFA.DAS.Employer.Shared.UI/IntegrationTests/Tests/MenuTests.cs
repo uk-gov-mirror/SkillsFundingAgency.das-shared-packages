@@ -46,7 +46,7 @@ public class MenuTests : TestBase
         var homeLink = content.QuerySelector(".mu-home");
         var financeLink = content.QuerySelector("a.mu-finance");
         var recruitLink = content.QuerySelector("a.mu-recruit");
-        var apprenticesLink = content.QuerySelector("a.mu-apprentices");
+        var learnersLink = content.QuerySelector("a.mu-learners");
         var yourTeamLink = content.QuerySelector("a.mu-team");
         var orgsLink = content.QuerySelector("a.mu-orgs");
         var payeLink = content.QuerySelector("a.mu-paye");
@@ -55,7 +55,7 @@ public class MenuTests : TestBase
         homeLink.Attributes["href"].Value.Should().Be("https://accounts.at-eas.apprenticeships.education.gov.uk/accounts/ABC123/teams");
         financeLink.Attributes["href"].Value.Should().Be("https://finance.at-eas.apprenticeships.education.gov.uk/accounts/ABC123/finance");
         recruitLink.Attributes["href"].Value.Should().Be("https://recruit.at-eas.apprenticeships.education.gov.uk/accounts/ABC123");
-        apprenticesLink.Attributes["href"].Value.Should().Be("https://approvals.at-eas.apprenticeships.education.gov.uk/ABC123");
+        learnersLink.Attributes["href"].Value.Should().Be("https://approvals.at-eas.apprenticeships.education.gov.uk/ABC123");
         yourTeamLink.Attributes["href"].Value.Should().Be("https://accounts.at-eas.apprenticeships.education.gov.uk/accounts/ABC123/teams/view");
         orgsLink.Attributes["href"].Value.Should().Be("https://accounts.at-eas.apprenticeships.education.gov.uk/accounts/ABC123/agreements");
         payeLink.Attributes["href"].Value.Should().Be("https://accounts.at-eas.apprenticeships.education.gov.uk/accounts/ABC123/schemes");
