@@ -46,7 +46,7 @@
                                 @if (!suppressed.Contains(NavigationSection.ManageApprentices))
                                 {
                                     <li class="govuk-service-navigation__item @(selected == NavigationSection.ManageApprentices ? "govuk-service-navigation__item--active" : "")">
-                                        <a class="govuk-service-navigation__link" asp-external-subdomain="approvals" asp-external-controller="apprentices" asp-external-id="@providerId"> Manage learner </a>
+                                        <a class="govuk-service-navigation__link" asp-external-subdomain="approvals" asp-external-controller="apprentices" asp-external-id="@providerId"> Manage learners </a>
                                     </li>
                                 }
                                 @if (!suppressed.Contains(NavigationSection.Recruit))
